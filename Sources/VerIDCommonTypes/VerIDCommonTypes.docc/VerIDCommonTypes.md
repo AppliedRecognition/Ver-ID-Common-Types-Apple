@@ -14,6 +14,7 @@ Collection of types used by Ver-ID face detection and recognition libraries
 - ``VerIDCommonTypes/UIKit/UIImage``
 - ``VerIDCommonTypes/CoreMedia/CMSampleBuffer``
 - ``VerIDCommonTypes/UIKit/UIInterfaceOrientation``
+- ``VerIDCommonTypes/UIKit/UIDeviceOrientation``
 
 ### Face
 

@@ -10,7 +10,7 @@ import UIKit
 import ImageIO
 import AVFoundation
 
-extension UIDeviceOrientation {
+public extension UIDeviceOrientation {
     
     /// Device orientation converted to `CGImagePropertyOrientation`
     /// - Since: 1.0.0
