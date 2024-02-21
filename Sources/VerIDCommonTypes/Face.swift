@@ -27,6 +27,20 @@ public struct Face: Comparable, Hashable {
     /// - Since: 1.0.0
     public let landmarks: [CGPoint]
     
+    /// Constructor
+    /// - Parameters:
+    ///   - bounds: Face bounds within the image (in pixels)
+    ///   - angle: Angle of the face
+    ///   - quality: Face quality
+    ///   - landmarks: Face landmarks
+    /// - Since: 1.0.0
+    public init(bounds: CGRect, angle: EulerAngle<Float>, quality: Float, landmarks: [CGPoint]) {
+        self.bounds = bounds
+        self.angle = angle
+        self.quality = quality
+        self.landmarks = landmarks
+    }
+    
     /// Comparable implementation
     public static func < (lhs: Face, rhs: Face) -> Bool {
         return lhs.bounds.width * lhs.bounds.height * CGFloat(lhs.quality) > rhs.bounds.width * rhs.bounds.height * CGFloat(rhs.quality)

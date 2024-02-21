@@ -37,6 +37,22 @@ public struct Image: ImageConvertible, Hashable {
         .init(width: self.width, height: self.height)
     }
     
+    /// Constructor
+    /// - Parameters:
+    ///   - data: Image pixel data
+    ///   - width: Image width in pixels
+    ///   - height: Image height in pixels
+    ///   - bytesPerRow: Bytes per row of pixels
+    ///   - format: Image format
+    /// - Since: 1.0.0
+    public init(data: Data, width: Int, height: Int, bytesPerRow: Int, format: ImageFormat) {
+        self.data = data
+        self.width = width
+        self.height = height
+        self.bytesPerRow = bytesPerRow
+        self.format = format
+    }
+    
     /// ``ImageConvertible`` implementation
     /// - Returns: Itself
     /// - Since: 1.0.0
