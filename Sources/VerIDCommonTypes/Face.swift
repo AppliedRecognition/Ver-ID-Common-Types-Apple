@@ -10,7 +10,7 @@ import CoreGraphics
 
 /// Face
 /// - Since: 1.0.0
-public struct Face: Comparable, Hashable {
+public struct Face: Comparable, Hashable, Sendable {
     
     /// Face bounds within the image (in pixels)
     /// - Since: 1.0.0

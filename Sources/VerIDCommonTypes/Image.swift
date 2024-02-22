@@ -12,7 +12,7 @@ import UIKit
 
 /// Image type used by Ver-ID libraries
 /// - Since: 1.0.0
-public struct Image: ImageConvertible, Hashable {
+public struct Image: ImageConvertible, Hashable, Sendable {
     
     /// Image pixel data
     ///

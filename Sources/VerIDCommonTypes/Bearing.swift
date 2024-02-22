@@ -9,6 +9,6 @@ import Foundation
 
 /// Bearing
 /// - Since: 1.0.0
-public enum Bearing: Hashable {
+public enum Bearing: Hashable, Sendable {
     case straight, up, rightUp, right, rightDown, down, leftDown, left, leftUp
 }
