@@ -9,7 +9,7 @@ import Foundation
 
 /// Euler angle
 /// - Since: 1.0.0
-public struct EulerAngle<T>: Hashable where T: Numeric, T: Hashable {
+public struct EulerAngle<T>: Hashable, Sendable where T: Numeric, T: Hashable, T: Sendable {
     
     /// Yaw
     /// - Since: 1.0.0
