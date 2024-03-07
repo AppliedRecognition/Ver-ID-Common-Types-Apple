@@ -4,7 +4,7 @@
 //
 //  Created by Jakub Dolejs on 25/10/2023.
 //
-
+#if canImport(UIKit)
 import Foundation
 import UIKit
 
@@ -34,3 +34,4 @@ extension UIImage: ImageConvertible {
     }
     
 }
+#endif

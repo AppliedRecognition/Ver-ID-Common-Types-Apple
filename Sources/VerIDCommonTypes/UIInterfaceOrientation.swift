@@ -4,6 +4,7 @@
 //
 //  Created by Jakub Dolejs on 31/10/2023.
 //
+#if canImport(UIkit)
 
 import UIKit
 import ImageIO
@@ -25,3 +26,5 @@ public extension UIInterfaceOrientation {
         }
     }
 }
+
+#endif
