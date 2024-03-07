@@ -5,6 +5,8 @@
 //  Created by Jakub Dolejs on 30/01/2024.
 //
 
+#if canImport(UIKit)
+
 import Foundation
 import UIKit
 import ImageIO
@@ -42,3 +44,5 @@ public extension UIDeviceOrientation {
         }
     }
 }
+
+#endif

@@ -9,7 +9,7 @@ import Foundation
 
 /// Image tagged with faces
 /// - Since: 1.0.0
-public struct TaggedImage: Hashable, Sendable {
+public struct TaggedImage: Hashable, Sendable, Codable {
     
     /// Image in which the ``faces`` were detected
     /// - Since: 1.0.0

@@ -1,0 +1,72 @@
+{
+    "$id": "http://appliedrecognition.com/schemas/Face",
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+        "bounds": {
+            "type": "object",
+            "properties": {
+                "x": {
+                    "type": "number"
+                },
+                "y": {
+                    "type": "number"
+                },
+                "width": {
+                    "type": "number"
+                },
+                "height": {
+                    "type": "number"
+                }
+            },
+            "required": [
+                "x",
+                "y",
+                "width",
+                "height"
+            ]
+        },
+        "angle": {
+            "type": "object",
+            "properties": {
+                "yaw": {
+                    "type": "number",
+                    "minimum": -360,
+                    "maximum": 360
+                },
+                "pitch": {
+                    "type": "number",
+                    "minimum": -360,
+                    "maximum": 360
+                },
+                "roll": {
+                    "type": "number",
+                    "minimum": -360,
+                    "maximum": 360
+                }
+            },
+            "required": [
+                "yaw",
+                "pitch",
+                "roll"
+            ]
+        },
+        "quality": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
+        },
+        "landmarks": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            }
+        }
+    },
+    "required": [
+        "bounds",
+        "angle",
+        "quality",
+        "landmarks"
+    ]
+}

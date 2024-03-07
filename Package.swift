@@ -10,7 +10,11 @@ let package = Package(
         // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
             name: "VerIDCommonTypes",
+            type: .dynamic,
             targets: ["VerIDCommonTypes"]),
+    ],
+    dependencies: [
+        .package(url: "https://github.com/kylef/JSONSchema.swift.git", from: "0.6.0")
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -19,6 +23,9 @@ let package = Package(
             name: "VerIDCommonTypes"),
         .testTarget(
             name: "VerIDCommonTypesTests",
-            dependencies: ["VerIDCommonTypes"]),
+            dependencies: ["VerIDCommonTypes", .product(name: "JSONSchema", package: "JSONSchema.swift")],
+            resources: [
+                .process("Resources")
+            ]),
     ]
 )

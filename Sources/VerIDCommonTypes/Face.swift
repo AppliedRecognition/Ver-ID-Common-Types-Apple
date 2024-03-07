@@ -10,7 +10,7 @@ import CoreGraphics
 
 /// Face
 /// - Since: 1.0.0
-public struct Face: Comparable, Hashable, Sendable {
+public struct Face: Hashable, Sendable {
     
     /// Face bounds within the image (in pixels)
     /// - Since: 1.0.0
@@ -39,16 +39,6 @@ public struct Face: Comparable, Hashable, Sendable {
         self.angle = angle
         self.quality = quality
         self.landmarks = landmarks
-    }
-    
-    /// Comparable implementation
-    public static func < (lhs: Face, rhs: Face) -> Bool {
-        return lhs.bounds.width * lhs.bounds.height * CGFloat(lhs.quality) > rhs.bounds.width * rhs.bounds.height * CGFloat(rhs.quality)
-    }
-    
-    /// Equatable implementation
-    public static func == (lhs: Face, rhs: Face) -> Bool {
-        return lhs.bounds == rhs.bounds && lhs.angle == rhs.angle && lhs.quality == rhs.quality && lhs.landmarks == rhs.landmarks
     }
     
     /// Change the aspect ratio of the face
@@ -80,5 +70,60 @@ public struct Face: Comparable, Hashable, Sendable {
         let faceBounds = self.bounds.applying(transform)
         let landmarks = self.landmarks.map { $0.applying(transform) }
         return Face(bounds: faceBounds, angle: self.angle, quality: self.quality, landmarks: landmarks)
+    }
+}
+
+extension Face: Comparable {
+    
+    public static func < (lhs: Self, rhs: Self) -> Bool {
+        return lhs.bounds.width * lhs.bounds.height * CGFloat(lhs.quality) > rhs.bounds.width * rhs.bounds.height * CGFloat(rhs.quality)
+    }
+}
+    
+extension Face: Equatable {
+    
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        return lhs.bounds == rhs.bounds && lhs.angle == rhs.angle && lhs.quality == rhs.quality && lhs.landmarks == rhs.landmarks
+    }
+}
+
+
+fileprivate enum FaceCodingKeys: String, CodingKey {
+    case bounds, angle, quality, landmarks
+}
+
+fileprivate enum FaceBoundsCodingKeys: String, CodingKey {
+    case x, y, width, height
+}
+
+extension Face: Codable {
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: FaceCodingKeys.self)
+        let bounds = try container.nestedContainer(keyedBy: FaceBoundsCodingKeys.self, forKey: .bounds)
+        let x = try bounds.decode(CGFloat.self, forKey: .x)
+        let y = try bounds.decode(CGFloat.self, forKey: .y)
+        let width = try bounds.decode(CGFloat.self, forKey: .width)
+        let height = try bounds.decode(CGFloat.self, forKey: .height)
+        self.angle = try container.decode(EulerAngle<Float>.self, forKey: .angle)
+        self.quality = try container.decode(Float.self, forKey: .quality)
+        let landmarks = try container.decode([CGFloat].self, forKey: .landmarks)
+        self.bounds = CGRect(x: x, y: y, width: width, height: height)
+        self.landmarks = stride(from: 0, to: landmarks.count, by: 2).map { index in
+            CGPoint(x: landmarks[index], y: landmarks[index+1])
+        }
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: FaceCodingKeys.self)
+        var bounds = container.nestedContainer(keyedBy: FaceBoundsCodingKeys.self, forKey: .bounds)
+        try bounds.encode(self.bounds.minX, forKey: .x)
+        try bounds.encode(self.bounds.minY, forKey: .y)
+        try bounds.encode(self.bounds.width, forKey: .width)
+        try bounds.encode(self.bounds.height, forKey: .height)
+        try container.encode(self.angle, forKey: .angle)
+        try container.encode(self.quality, forKey: .quality)
+        let landmarks = self.landmarks.flatMap { [$0.x, $0.y] }
+        try container.encode(landmarks, forKey: .landmarks)
     }
 }

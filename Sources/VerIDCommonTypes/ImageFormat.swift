@@ -9,7 +9,7 @@ import Foundation
 
 /// Image format
 /// - Since: 1.0.0
-public enum ImageFormat: Sendable {
+public enum ImageFormat: Sendable, Codable {
     /// RGB – red, gree, blue
     case rgb
     /// BRG – blue, green, red

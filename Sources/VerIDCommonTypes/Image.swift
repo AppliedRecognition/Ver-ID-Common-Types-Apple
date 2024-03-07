@@ -8,11 +8,12 @@
 import Foundation
 import CoreGraphics
 import Accelerate
+#if canImport(UIKit)
 import UIKit
-
+#endif
 /// Image type used by Ver-ID libraries
 /// - Since: 1.0.0
-public struct Image: ImageConvertible, Hashable, Sendable {
+public struct Image: ImageConvertible, Hashable, Sendable, Codable {
     
     /// Image pixel data
     ///
@@ -181,6 +182,7 @@ public struct Image: ImageConvertible, Hashable, Sendable {
         self.bytesPerRow = Int(outWidth) * bytesPerPixel
     }
     
+    #if canImport(UIKit)
     /// Apply the given orientation to the image
     /// - Parameter orientation: Orientation
     /// - Throws: ``ImageError``
@@ -209,6 +211,7 @@ public struct Image: ImageConvertible, Hashable, Sendable {
         }
         return try self.applyOrientation(cgOrientation)
     }
+    #endif
     
     /// Crop the image to the given rectangle
     /// - Parameter rect: Rectangle to which the image will be cropped
