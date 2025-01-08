@@ -61,12 +61,46 @@
             "items": {
                 "type": "number"
             }
+        },
+        "leftEye": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+        },
+        "rightEye": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+        },
+        "noseTip": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+        },
+        "mouthCentre": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
         }
     },
     "required": [
         "bounds",
         "angle",
         "quality",
-        "landmarks"
+        "landmarks",
+        "leftEye",
+        "rightEye"
     ]
 }

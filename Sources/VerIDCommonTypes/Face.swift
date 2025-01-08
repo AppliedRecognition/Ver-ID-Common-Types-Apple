@@ -27,6 +27,11 @@ public struct Face: Hashable, Sendable {
     /// - Since: 1.0.0
     public let landmarks: [CGPoint]
     
+    public let leftEye: CGPoint
+    public let rightEye: CGPoint
+    public let noseTip: CGPoint?
+    public let mouthCentre: CGPoint?
+    
     /// Constructor
     /// - Parameters:
     ///   - bounds: Face bounds within the image (in pixels)
@@ -34,11 +39,15 @@ public struct Face: Hashable, Sendable {
     ///   - quality: Face quality
     ///   - landmarks: Face landmarks
     /// - Since: 1.0.0
-    public init(bounds: CGRect, angle: EulerAngle<Float>, quality: Float, landmarks: [CGPoint]) {
+    public init(bounds: CGRect, angle: EulerAngle<Float>, quality: Float, landmarks: [CGPoint], leftEye: CGPoint, rightEye: CGPoint, noseTip: CGPoint?=nil, mouthCentre: CGPoint?=nil) {
         self.bounds = bounds
         self.angle = angle
         self.quality = quality
         self.landmarks = landmarks
+        self.leftEye = leftEye
+        self.rightEye = rightEye
+        self.noseTip = noseTip
+        self.mouthCentre = mouthCentre
     }
     
     /// Change the aspect ratio of the face
@@ -59,7 +68,7 @@ public struct Face: Hashable, Sendable {
             faceBounds.origin.x = faceBounds.midX - newWidth / 2
             faceBounds.size.width = newWidth
         }
-        return Face(bounds: faceBounds, angle: self.angle, quality: self.quality, landmarks: self.landmarks)
+        return Face(bounds: faceBounds, angle: self.angle, quality: self.quality, landmarks: self.landmarks, leftEye: self.leftEye, rightEye: self.rightEye, noseTip: self.noseTip, mouthCentre: self.mouthCentre)
     }
     
     /// Apply an affine transform to the face bounds and landmarks
@@ -69,7 +78,11 @@ public struct Face: Hashable, Sendable {
     public func applying(_ transform: CGAffineTransform) -> Face {
         let faceBounds = self.bounds.applying(transform)
         let landmarks = self.landmarks.map { $0.applying(transform) }
-        return Face(bounds: faceBounds, angle: self.angle, quality: self.quality, landmarks: landmarks)
+        let leftEye = self.leftEye.applying(transform)
+        let rightEye = self.rightEye.applying(transform)
+        let noseTip = self.noseTip?.applying(transform)
+        let mouthCentre = self.mouthCentre?.applying(transform)
+        return Face(bounds: faceBounds, angle: self.angle, quality: self.quality, landmarks: landmarks, leftEye: leftEye, rightEye: rightEye, noseTip: noseTip, mouthCentre: mouthCentre)
     }
 }
 
@@ -89,7 +102,7 @@ extension Face: Equatable {
 
 
 fileprivate enum FaceCodingKeys: String, CodingKey {
-    case bounds, angle, quality, landmarks
+    case bounds, angle, quality, landmarks, leftEye, rightEye, noseTip, mouthCentre
 }
 
 fileprivate enum FaceBoundsCodingKeys: String, CodingKey {
@@ -112,6 +125,10 @@ extension Face: Codable {
         self.landmarks = stride(from: 0, to: landmarks.count, by: 2).map { index in
             CGPoint(x: landmarks[index], y: landmarks[index+1])
         }
+        self.leftEye = try Face.decodePointFromArray(container: container, key: .leftEye)
+        self.rightEye = try Face.decodePointFromArray(container: container, key: .rightEye)
+        self.noseTip = try Face.decodeOptionalPointFromArray(container: container, key: .noseTip)
+        self.mouthCentre = try Face.decodeOptionalPointFromArray(container: container, key: .mouthCentre)
     }
     
     public func encode(to encoder: Encoder) throws {
@@ -125,5 +142,25 @@ extension Face: Codable {
         try container.encode(self.quality, forKey: .quality)
         let landmarks = self.landmarks.flatMap { [$0.x, $0.y] }
         try container.encode(landmarks, forKey: .landmarks)
+        try container.encode([self.leftEye.x, self.leftEye.y], forKey: .leftEye)
+        try container.encode([self.rightEye.x, self.rightEye.y], forKey: .rightEye)
+        if let noseTip = self.noseTip {
+            try container.encode([noseTip.x, noseTip.y], forKey: .noseTip)
+        }
+        if let mouthCentre = self.mouthCentre {
+            try container.encode([mouthCentre.x, mouthCentre.y], forKey: .mouthCentre)
+        }
+    }
+    
+    private static func decodePointFromArray(container: KeyedDecodingContainer<FaceCodingKeys>, key: FaceCodingKeys) throws -> CGPoint {
+        let arr = try container.decode([CGFloat].self, forKey: key)
+        return CGPoint(x: arr[0], y: arr[1])
+    }
+    
+    private static func decodeOptionalPointFromArray(container: KeyedDecodingContainer<FaceCodingKeys>, key: FaceCodingKeys) throws -> CGPoint? {
+        if let arr = try container.decodeIfPresent([CGFloat].self, forKey: key) {
+            return CGPoint(x: arr[0], y: arr[1])
+        }
+        return nil
     }
 }
