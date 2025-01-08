@@ -9,7 +9,6 @@ Collection of types used by Ver-ID face detection and recognition libraries
 - ``Image``
 - ``ImageConvertible``
 - ``ImageFormat``
-- ``TaggedImage``
 - ``VerIDCommonTypes/CoreGraphics/CGImage``
 - ``VerIDCommonTypes/UIKit/UIImage``
 - ``VerIDCommonTypes/CoreMedia/CMSampleBuffer``
