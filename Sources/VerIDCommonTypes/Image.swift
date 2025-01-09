@@ -118,14 +118,6 @@ public struct Image: Hashable, @unchecked Sendable {
                     default:
                         prefixConst = "unknown prefix constant"
                     }
-                    NSLog("Path: %@", path as String)
-                    NSLog("Type: %@", tagTypeStr)
-                    NSLog("Namespace: %@", namespace)
-                    NSLog("Namespace (constant): %@", nsConst)
-                    NSLog("Prefix: %@", prefix)
-                    NSLog("Prefix (constant): %@", prefixConst)
-                    NSLog("Name: %@", name)
-                    NSLog("-------------")
                     return true
                 }
             }
