@@ -8,8 +8,9 @@
 import Foundation
 
 public protocol FaceRecognition {
+    associatedtype FaceTemplate: Codable, Hashable, Sendable
     
-    func createFaceRecognitionTemplates(from faces: [Face], in image: Image) throws -> [FaceRecognitionTemplate]
+    func createFaceRecognitionTemplates(from faces: [Face], in image: Image) throws -> [FaceTemplate]
     
-    func compareFaceRecognitionTemplates(_ faceRecognitionTemplates: [FaceRecognitionTemplate], to template: FaceRecognitionTemplate) throws -> Float
+    func compareFaceRecognitionTemplates(_ faceRecognitionTemplates: [FaceTemplate], to template: FaceTemplate) throws -> Float
 }

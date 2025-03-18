@@ -7,8 +7,8 @@
 
 import Foundation
 
-public struct RecognizableFace: Hashable, Sendable, Codable {
+public struct RecognizableFace<T>: Hashable, Sendable, Codable where T: Codable, T: Hashable, T: Sendable {
     
     let face: Face
-    let template: FaceRecognitionTemplate
+    let template: T
 }
