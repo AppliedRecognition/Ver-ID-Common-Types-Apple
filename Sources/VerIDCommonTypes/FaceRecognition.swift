@@ -12,5 +12,5 @@ public protocol FaceRecognition {
     
     func createFaceRecognitionTemplates(from faces: [Face], in image: Image) throws -> [FaceTemplate]
     
-    func compareFaceRecognitionTemplates(_ faceRecognitionTemplates: [FaceTemplate], to template: FaceTemplate) throws -> Float
+    func compareFaceRecognitionTemplates(_ faceRecognitionTemplates: [FaceTemplate], to template: FaceTemplate) throws -> [Float]
 }
