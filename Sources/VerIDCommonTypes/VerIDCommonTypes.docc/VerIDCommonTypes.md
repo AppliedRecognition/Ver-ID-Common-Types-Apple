@@ -28,3 +28,9 @@ Collection of types used by Ver-ID face detection and recognition libraries
 - ``CoreGraphics/CGRect``
 - ``CoreGraphics/CGSize``
 - ``CoreGraphics/CGPoint``
+
+### Protocols
+
+- ``FaceDetection``
+- ``FaceRecognition``
+- ``SpoofDetection``
