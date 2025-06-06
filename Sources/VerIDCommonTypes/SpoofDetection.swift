@@ -9,5 +9,5 @@ import Foundation
 
 public protocol SpoofDetection {
     
-    func detectSpoofInImage(_ image: Image, regionOfInterest: CGRect?) throws -> Float
+    func detectSpoofInImage(_ image: Image, regionOfInterest: CGRect?) async throws -> Float
 }
