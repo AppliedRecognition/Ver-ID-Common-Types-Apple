@@ -17,5 +17,5 @@ public protocol FaceDetection {
     ///   - limit: Maximum number of faces to detect
     /// - Returns: Array of detected faces
     /// - Since: 1.0.0
-    func detectFacesInImage(_ image: Image, limit: Int) throws -> [Face]
+    func detectFacesInImage(_ image: Image, limit: Int) async throws -> [Face]
 }
