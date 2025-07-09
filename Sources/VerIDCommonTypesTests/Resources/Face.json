@@ -93,6 +93,22 @@
             },
             "minItems": 2,
             "maxItems": 2
+        },
+        "mouthLeftCorner": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+        },
+        "mouthRightCorner": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
         }
     },
     "required": [
