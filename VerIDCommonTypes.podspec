@@ -1,6 +1,6 @@
 Pod::Spec.new do |spec|
   spec.name = "VerIDCommonTypes"
-  spec.version = "2.0.0"
+  spec.version = "2.1.0"
   spec.summary = "Common types for Ver-ID SDK classes"
   spec.homepage = "https://github.com/AppliedRecognition/Ver-ID-Common-Types-Apple"
   spec.license = { :type => "Commercial", :file => "LICENCE.txt" }

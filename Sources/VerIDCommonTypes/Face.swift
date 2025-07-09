@@ -31,6 +31,12 @@ public struct Face: Hashable, Sendable {
     public let rightEye: CGPoint
     public let noseTip: CGPoint?
     public let mouthCentre: CGPoint?
+    /// Coordinate of the left corner of the mouth
+    /// - Since: 2.1.0
+    public let mouthLeftCorner: CGPoint?
+    /// Coordinate of the right corner of the mouth
+    /// - Since: 2.1.0
+    public let mouthRightCorner: CGPoint?
     
     /// Constructor
     /// - Parameters:
@@ -39,7 +45,7 @@ public struct Face: Hashable, Sendable {
     ///   - quality: Face quality
     ///   - landmarks: Face landmarks
     /// - Since: 1.0.0
-    public init(bounds: CGRect, angle: EulerAngle<Float>, quality: Float, landmarks: [CGPoint], leftEye: CGPoint, rightEye: CGPoint, noseTip: CGPoint?=nil, mouthCentre: CGPoint?=nil) {
+    public init(bounds: CGRect, angle: EulerAngle<Float>, quality: Float, landmarks: [CGPoint], leftEye: CGPoint, rightEye: CGPoint, noseTip: CGPoint?=nil, mouthCentre: CGPoint?=nil, mouthLeftCorner: CGPoint?=nil, mouthRightCorner: CGPoint?=nil) {
         self.bounds = bounds
         self.angle = angle
         self.quality = quality
@@ -48,6 +54,8 @@ public struct Face: Hashable, Sendable {
         self.rightEye = rightEye
         self.noseTip = noseTip
         self.mouthCentre = mouthCentre
+        self.mouthLeftCorner = mouthLeftCorner
+        self.mouthRightCorner = mouthRightCorner
     }
     
     /// Change the aspect ratio of the face
@@ -68,7 +76,7 @@ public struct Face: Hashable, Sendable {
             faceBounds.origin.x = faceBounds.midX - newWidth / 2
             faceBounds.size.width = newWidth
         }
-        return Face(bounds: faceBounds, angle: self.angle, quality: self.quality, landmarks: self.landmarks, leftEye: self.leftEye, rightEye: self.rightEye, noseTip: self.noseTip, mouthCentre: self.mouthCentre)
+        return Face(bounds: faceBounds, angle: self.angle, quality: self.quality, landmarks: self.landmarks, leftEye: self.leftEye, rightEye: self.rightEye, noseTip: self.noseTip, mouthCentre: self.mouthCentre, mouthLeftCorner: self.mouthLeftCorner, mouthRightCorner: self.mouthRightCorner)
     }
     
     /// Apply an affine transform to the face bounds and landmarks
@@ -82,7 +90,9 @@ public struct Face: Hashable, Sendable {
         let rightEye = self.rightEye.applying(transform)
         let noseTip = self.noseTip?.applying(transform)
         let mouthCentre = self.mouthCentre?.applying(transform)
-        return Face(bounds: faceBounds, angle: self.angle, quality: self.quality, landmarks: landmarks, leftEye: leftEye, rightEye: rightEye, noseTip: noseTip, mouthCentre: mouthCentre)
+        let mouthLeftCorner = self.mouthLeftCorner?.applying(transform)
+        let mouthRightCorner = self.mouthRightCorner?.applying(transform)
+        return Face(bounds: faceBounds, angle: self.angle, quality: self.quality, landmarks: landmarks, leftEye: leftEye, rightEye: rightEye, noseTip: noseTip, mouthCentre: mouthCentre, mouthLeftCorner: mouthLeftCorner, mouthRightCorner: mouthRightCorner)
     }
 }
 
@@ -102,7 +112,7 @@ extension Face: Equatable {
 
 
 fileprivate enum FaceCodingKeys: String, CodingKey {
-    case bounds, angle, quality, landmarks, leftEye, rightEye, noseTip, mouthCentre
+    case bounds, angle, quality, landmarks, leftEye, rightEye, noseTip, mouthCentre, mouthLeftCorner, mouthRightCorner
 }
 
 fileprivate enum FaceBoundsCodingKeys: String, CodingKey {
@@ -129,6 +139,8 @@ extension Face: Codable {
         self.rightEye = try Face.decodePointFromArray(container: container, key: .rightEye)
         self.noseTip = try Face.decodeOptionalPointFromArray(container: container, key: .noseTip)
         self.mouthCentre = try Face.decodeOptionalPointFromArray(container: container, key: .mouthCentre)
+        self.mouthLeftCorner = try Face.decodeOptionalPointFromArray(container: container, key: .mouthLeftCorner)
+        self.mouthRightCorner = try Face.decodeOptionalPointFromArray(container: container, key: .mouthRightCorner)
     }
     
     public func encode(to encoder: Encoder) throws {
@@ -149,6 +161,12 @@ extension Face: Codable {
         }
         if let mouthCentre = self.mouthCentre {
             try container.encode([mouthCentre.x, mouthCentre.y], forKey: .mouthCentre)
+        }
+        if let mouthLeftCorner = self.mouthLeftCorner {
+            try container.encode([mouthLeftCorner.x, mouthLeftCorner.y], forKey: .mouthLeftCorner)
+        }
+        if let mouthRightCorner = self.mouthRightCorner {
+            try container.encode([mouthRightCorner.x, mouthRightCorner.y], forKey: .mouthRightCorner)
         }
     }
     
