@@ -7,7 +7,11 @@
 
 import Foundation
 
-public struct FaceTemplate<Version: FaceTemplateVersion, TemplateData: FaceTemplateData>: Hashable, Sendable, Codable {
+public protocol FaceTemplateProtocol: Hashable, Sendable, Codable {
+    var version: Int { get }
+}
+
+public struct FaceTemplate<Version: FaceTemplateVersion, TemplateData: FaceTemplateData>: FaceTemplateProtocol {
     
     private enum CodingKeys: String, CodingKey {
         case version
@@ -15,6 +19,9 @@ public struct FaceTemplate<Version: FaceTemplateVersion, TemplateData: FaceTempl
     }
     
     public let data: TemplateData
+    public var version: Int {
+        return Version.id
+    }
     
     public init(data: TemplateData) {
         self.data = data
