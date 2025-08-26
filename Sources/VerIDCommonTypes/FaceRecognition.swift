@@ -13,6 +13,8 @@ public protocol FaceRecognition {
     
     var version: Int { get }
     
+    var defaultThreshold: Float { get }
+    
     /// Create face recognition templates
     /// - Parameters:
     ///   - faces: Faces from which to extract the face templates
