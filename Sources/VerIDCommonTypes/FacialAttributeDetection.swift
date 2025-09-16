@@ -16,6 +16,10 @@ public protocol FacialAttributeDetection {
 public struct FacialAttributeDetectionResult<T> where T: Hashable & RawRepresentable, T.RawValue == String {
     public let confidence: Float
     public let type: T
+    public init(confidence: Float, type: T) {
+        self.confidence = confidence
+        self.type = type
+    }
 }
 
 public extension FacialAttributeDetection {
