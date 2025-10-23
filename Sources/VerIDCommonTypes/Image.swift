@@ -16,9 +16,67 @@ import AVFoundation
 import ImageIO
 import CoreImage
 import MobileCoreServices
-import UIKit
 
 public struct Image: Hashable, @unchecked Sendable {
+    
+    private static let ciContext = CIContext()
+    
+    // Reusable CVPixelBuffer pools keyed by (width,height,pixelFormat) with LRU eviction
+    private static var pixelBufferPools: [String: CVPixelBufferPool] = [:]
+    private static var pixelBufferPoolsLRU: [String] = [] // most-recently-used at end
+    private static let pixelBufferPoolsLock = NSLock()
+    private static let pixelBufferPoolsCapacity = 32
+
+    public static func clearPixelBufferPools() {
+        pixelBufferPoolsLock.lock()
+        pixelBufferPools.removeAll()
+        pixelBufferPoolsLRU.removeAll()
+        pixelBufferPoolsLock.unlock()
+    }
+
+    private static func poolKey(width: Int, height: Int, pixelFormat: OSType) -> String {
+        "\(width)x\(height)-\(pixelFormat)"
+    }
+
+    private static func pixelBufferPool(width: Int, height: Int, pixelFormat: OSType = kCVPixelFormatType_32BGRA, minimumBufferCount: Int = 3) -> CVPixelBufferPool? {
+        let key = poolKey(width: width, height: height, pixelFormat: pixelFormat)
+        pixelBufferPoolsLock.lock()
+        defer { pixelBufferPoolsLock.unlock() }
+
+        // Hit: return existing and mark as most-recently-used
+        if let existing = pixelBufferPools[key] {
+            if let idx = pixelBufferPoolsLRU.firstIndex(of: key) {
+                pixelBufferPoolsLRU.remove(at: idx)
+            }
+            pixelBufferPoolsLRU.append(key)
+            return existing
+        }
+
+        // Miss: create a new pool
+        let attrs: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: Int(pixelFormat),
+            kCVPixelBufferWidthKey as String: width,
+            kCVPixelBufferHeightKey as String: height,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:]
+        ]
+        let poolOpts: [String: Any] = [
+            kCVPixelBufferPoolMinimumBufferCountKey as String: minimumBufferCount
+        ]
+        var pool: CVPixelBufferPool?
+        let status = CVPixelBufferPoolCreate(kCFAllocatorDefault, poolOpts as CFDictionary, attrs as CFDictionary, &pool)
+        guard status == kCVReturnSuccess, let pool else { return nil }
+
+        // Insert and mark as MRU
+        pixelBufferPools[key] = pool
+        pixelBufferPoolsLRU.append(key)
+
+        // Evict if over capacity (remove LRU at front)
+        if pixelBufferPoolsLRU.count > pixelBufferPoolsCapacity, let lruKey = pixelBufferPoolsLRU.first {
+            pixelBufferPoolsLRU.removeFirst()
+            pixelBufferPools.removeValue(forKey: lruKey)
+        }
+        return pool
+    }
     
     public let videoBuffer: CVPixelBuffer
     public let depthData: AVDepthData?
@@ -77,6 +135,32 @@ public struct Image: Hashable, @unchecked Sendable {
         self.depthData = depthData?.applyingExifOrientation(orientation)
     }
     
+    #if canImport(UIKit)
+    
+    public init?(uiImage: UIImage, depthData: AVDepthData? = nil) {
+        if let ciImage = uiImage.ciImage, let buffer = Image.createCVPixelBuffer(from: ciImage) {
+            self.videoBuffer = buffer
+        } else if let cgImage = uiImage.cgImage {
+            let ciImage = CIImage(cgImage: cgImage).oriented(uiImage.imageOrientation.cgImagePropertyOrientation)
+            guard let buffer = Image.createCVPixelBuffer(from: ciImage) else {
+                return nil
+            }
+            self.videoBuffer = buffer
+        } else {
+            return nil
+        }
+        self.depthData = depthData?.applyingExifOrientation(uiImage.imageOrientation.cgImagePropertyOrientation)
+    }
+    
+    public func toUIImage() -> UIImage? {
+        if let cgImage = self.toCGImage() {
+            return UIImage(cgImage: cgImage)
+        }
+        return nil
+    }
+    
+    #endif
+    
     // Method to persist the Image in HEIC format
     public func toHEIC() -> Data? {
         let data = NSMutableData()
@@ -90,8 +174,8 @@ public struct Image: Hashable, @unchecked Sendable {
         // Add depth data if available
         if let depthData = depthData {
             var auxDataType: NSString? = nil
-            if let depthDict = depthData.dictionaryRepresentation(forAuxiliaryDataType: &auxDataType) {
-                CGImageDestinationAddAuxiliaryDataInfo(destination, auxDataType!, depthDict as CFDictionary)
+            if let depthDict = depthData.dictionaryRepresentation(forAuxiliaryDataType: &auxDataType), let auxDataType {
+                CGImageDestinationAddAuxiliaryDataInfo(destination, auxDataType, depthDict as CFDictionary)
             }
         }
         // Finalize the destination to write to data
@@ -112,8 +196,8 @@ public struct Image: Hashable, @unchecked Sendable {
         let referenceDimensions = cameraCalibrationData.intrinsicMatrixReferenceDimensions
         let rotatedX: CGFloat = CGFloat(x)
         let rotatedY: CGFloat = CGFloat(y)
-        var imageWidth: CGFloat = CGFloat(self.width)
-        var imageHeight: CGFloat = CGFloat(self.height)
+        let imageWidth: CGFloat = CGFloat(self.width)
+        let imageHeight: CGFloat = CGFloat(self.height)
         let normX = rotatedX / imageWidth * referenceDimensions.width
         let normY = rotatedY / imageHeight * referenceDimensions.height
         let depthMapWidth = CGFloat(CVPixelBufferGetWidth(depthData.depthDataMap))
@@ -124,9 +208,10 @@ public struct Image: Hashable, @unchecked Sendable {
     }
     
     public func coordinates3dAt(x: Int, y: Int) -> simd_float3? {
-        guard let depthData = self.depthData else {
+        guard let originalDepthData = self.depthData else {
             return nil
         }
+        let depthData = originalDepthData.converting(toDepthDataType: kCVPixelFormatType_DepthFloat32)
         guard let cameraCalibrationData = depthData.cameraCalibrationData else {
             return nil
         }
@@ -219,38 +304,46 @@ public struct Image: Hashable, @unchecked Sendable {
     
     private static func createCGImage(from pixelBuffer: CVPixelBuffer) -> CGImage? {
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext()
-        return context.createCGImage(ciImage, from: ciImage.extent)
+        return Image.ciContext.createCGImage(ciImage, from: ciImage.extent)
     }
     
     private static func createCVPixelBuffer(from ciImage: CIImage) -> CVPixelBuffer? {
         let width = Int(ciImage.extent.width)
         let height = Int(ciImage.extent.height)
         
-        let pixelBufferAttributes: [String: Any] = [
-            kCVPixelBufferWidthKey as String: width,
-            kCVPixelBufferHeightKey as String: height,
-            kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
-            kCVPixelBufferIOSurfacePropertiesKey as String: [:]
-        ]
-        
-        var pixelBuffer: CVPixelBuffer?
-        let status = CVPixelBufferCreate(
-            kCFAllocatorDefault,
-            width,
-            height,
-            kCVPixelFormatType_32BGRA,
-            pixelBufferAttributes as CFDictionary,
-            &pixelBuffer
-        )
-        
-        guard status == kCVReturnSuccess, let buffer = pixelBuffer else {
+        guard let pool = pixelBufferPool(width: width, height: height) else {
             return nil
         }
-        
-        let context = CIContext()
-        context.render(ciImage, to: buffer)
-        
+        var bufferOut: CVPixelBuffer?
+        let status = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &bufferOut)
+        guard status == kCVReturnSuccess, let buffer = bufferOut else {
+            return nil
+        }
+        Image.ciContext.render(ciImage, to: buffer)
         return buffer
+    }
+}
+
+#if canImport(UIKit)
+
+public extension UIImage {
+    func toVerIDImage() throws -> Image {
+        if let image = Image(uiImage: self) {
+            return image
+        } else {
+            throw ImageError.imageConversionFailed
+        }
+    }
+}
+
+#endif
+
+public extension CGImage {
+    func toVerIDImage() throws -> Image {
+        if let image = Image(cgImage: self) {
+            return image
+        } else {
+            throw ImageError.imageConversionFailed
+        }
     }
 }
