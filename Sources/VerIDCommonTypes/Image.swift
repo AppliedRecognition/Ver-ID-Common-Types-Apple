@@ -323,3 +323,27 @@ public struct Image: Hashable, @unchecked Sendable {
         return buffer
     }
 }
+
+#if canImport(UIKit)
+
+public extension UIImage {
+    func toVerIDImage() throws -> Image {
+        if let image = Image(uiImage: self) {
+            return image
+        } else {
+            throw ImageError.imageConversionFailed
+        }
+    }
+}
+
+#endif
+
+public extension CGImage {
+    func toVerIDImage() throws -> Image {
+        if let image = Image(cgImage: self) {
+            return image
+        } else {
+            throw ImageError.imageConversionFailed
+        }
+    }
+}
