@@ -99,53 +99,65 @@ public struct Image: Hashable, @unchecked Sendable {
     
     // Initializer with HEIC byte array
     public init?(heicData: Data) {
-        guard let imageSource = CGImageSourceCreateWithData(heicData as CFData, nil) else {
-            return nil
-        }
-        guard let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
-            return nil
-        }
-        var orientation: CGImagePropertyOrientation = .up
-        if let imageProperties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any], let orientationValue = imageProperties[kCGImagePropertyOrientation] as? UInt32, let o = CGImagePropertyOrientation(rawValue: orientationValue) {
-            orientation = o
-        }
-        guard let buffer = Image.createCVPixelBuffer(from: cgImage, orientation: orientation) else {
-            return nil
-        }
-        self.videoBuffer = buffer
-        if let depthAuxDataInfo = CGImageSourceCopyAuxiliaryDataInfoAtIndex(imageSource, 0, kCGImageAuxiliaryDataTypeDepth as CFString) as? [AnyHashable: Any],
-              let depthData = try? AVDepthData(fromDictionaryRepresentation: depthAuxDataInfo) {
-            if orientation != .up {
-                self.depthData = depthData.applyingExifOrientation(orientation)
-            } else {
-                self.depthData = depthData
+        guard let videoAndDepth: (CVPixelBuffer, AVDepthData?) = autoreleasepool(invoking: {
+            guard let imageSource = CGImageSourceCreateWithData(heicData as CFData, nil) else {
+                return nil
             }
-        } else {
-            self.depthData = nil
+            guard let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
+                return nil
+            }
+            var orientation: CGImagePropertyOrientation = .up
+            if let imageProperties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any], let orientationValue = imageProperties[kCGImagePropertyOrientation] as? UInt32, let o = CGImagePropertyOrientation(rawValue: orientationValue) {
+                orientation = o
+            }
+            guard let buffer = Image.createCVPixelBuffer(from: cgImage, orientation: orientation) else {
+                return nil
+            }
+            if let depthAuxDataInfo = CGImageSourceCopyAuxiliaryDataInfoAtIndex(imageSource, 0, kCGImageAuxiliaryDataTypeDepth as CFString) as? [AnyHashable: Any],
+                  let depthData = try? AVDepthData(fromDictionaryRepresentation: depthAuxDataInfo) {
+                if orientation != .up {
+                    return (buffer, depthData.applyingExifOrientation(orientation))
+                } else {
+                    return (buffer, depthData)
+                }
+            } else {
+                return (buffer, nil)
+            }
+        }) else {
+            return nil
         }
+        self.videoBuffer = videoAndDepth.0
+        self.depthData = videoAndDepth.1
     }
     
     public init?(cgImage: CGImage, orientation: CGImagePropertyOrientation = .up, depthData: AVDepthData? = nil) {
-        guard let buffer = Image.createCVPixelBuffer(from: cgImage, orientation: orientation) else {
+        guard let videoBuffer: CVPixelBuffer = autoreleasepool(invoking: {
+            Image.createCVPixelBuffer(from: cgImage, orientation: orientation)
+        }) else {
             return nil
         }
-        self.videoBuffer = buffer
+        self.videoBuffer = videoBuffer
         self.depthData = depthData?.applyingExifOrientation(orientation)
     }
     
     #if canImport(UIKit)
     
     public init?(uiImage: UIImage, depthData: AVDepthData? = nil) {
-        if let cgImage = uiImage.cgImage {
-            guard let buffer = Image.createCVPixelBuffer(from: cgImage, orientation: uiImage.imageOrientation.cgImagePropertyOrientation) else {
+        guard let videoBuffer: CVPixelBuffer = autoreleasepool(invoking: {
+            if let cgImage = uiImage.cgImage {
+                guard let buffer = Image.createCVPixelBuffer(from: cgImage, orientation: uiImage.imageOrientation.cgImagePropertyOrientation) else {
+                    return nil
+                }
+                return buffer
+            } else if let ciImage = uiImage.ciImage, let buffer = Image.createCVPixelBuffer(from: ciImage) {
+                return buffer
+            } else {
                 return nil
             }
-            self.videoBuffer = buffer
-        } else if let ciImage = uiImage.ciImage, let buffer = Image.createCVPixelBuffer(from: ciImage) {
-            self.videoBuffer = buffer
-        } else {
+        }) else {
             return nil
         }
+        self.videoBuffer = videoBuffer
         self.depthData = depthData?.applyingExifOrientation(uiImage.imageOrientation.cgImagePropertyOrientation)
     }
     
@@ -160,30 +172,34 @@ public struct Image: Hashable, @unchecked Sendable {
     
     // Method to persist the Image in HEIC format
     public func toHEIC() -> Data? {
-        let data = NSMutableData()
-        let pixelBuffer = self.videoBuffer
-        guard let destination = CGImageDestinationCreateWithData(data as CFMutableData, AVFileType.heic as CFString, 1, nil), let cgImage = Image.createCGImage(from: pixelBuffer) else {
-            return nil
-        }
-        // Add the main image to the destination
-        let properties: CFDictionary = [:] as CFDictionary
-        CGImageDestinationAddImage(destination, cgImage, properties)
-        // Add depth data if available
-        if let depthData = depthData {
-            var auxDataType: NSString? = nil
-            if let depthDict = depthData.dictionaryRepresentation(forAuxiliaryDataType: &auxDataType), let auxDataType {
-                CGImageDestinationAddAuxiliaryDataInfo(destination, auxDataType, depthDict as CFDictionary)
+        return autoreleasepool {
+            let data = NSMutableData()
+            let pixelBuffer = self.videoBuffer
+            guard let destination = CGImageDestinationCreateWithData(data as CFMutableData, AVFileType.heic as CFString, 1, nil), let cgImage = Image.createCGImage(from: pixelBuffer) else {
+                return nil
             }
+            // Add the main image to the destination
+            let properties: CFDictionary = [:] as CFDictionary
+            CGImageDestinationAddImage(destination, cgImage, properties)
+            // Add depth data if available
+            if let depthData = depthData {
+                var auxDataType: NSString? = nil
+                if let depthDict = depthData.dictionaryRepresentation(forAuxiliaryDataType: &auxDataType), let auxDataType {
+                    CGImageDestinationAddAuxiliaryDataInfo(destination, auxDataType, depthDict as CFDictionary)
+                }
+            }
+            // Finalize the destination to write to data
+            guard CGImageDestinationFinalize(destination) else {
+                return nil
+            }
+            return data as Data
         }
-        // Finalize the destination to write to data
-        guard CGImageDestinationFinalize(destination) else {
-            return nil
-        }
-        return data as Data
     }
     
     public func toCGImage() -> CGImage? {
-        return Image.createCGImage(from: self.videoBuffer)
+        return autoreleasepool {
+            Image.createCGImage(from: self.videoBuffer)
+        }
     }
     
     private func imageCoordinatesToDepthCoordinates(x: Int, y: Int) -> (Int, Int)? {
@@ -277,19 +293,25 @@ public struct Image: Hashable, @unchecked Sendable {
             let dstHeight = needsSwap ? wrapped.width : wrapped.height
             guard let pool = Image.pixelBufferPool(width: Int(dstWidth), height: Int(dstHeight), pixelFormat: kCVPixelFormatType_32BGRA) else {
                 // Fallback to CI-based orientation if pool fails
-                let ciImage = CIImage(cvPixelBuffer: pixelBuffer).oriented(orientation)
-                return Image.createCVPixelBuffer(from: ciImage) ?? pixelBuffer
+                return autoreleasepool {
+                    let ciImage = CIImage(cvPixelBuffer: pixelBuffer).oriented(orientation)
+                    return Image.createCVPixelBuffer(from: ciImage) ?? pixelBuffer
+                }
             }
             var outPixelBufferOpt: CVPixelBuffer?
             guard CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &outPixelBufferOpt) == kCVReturnSuccess, let outPixelBuffer = outPixelBufferOpt else {
-                let ciImage = CIImage(cvPixelBuffer: pixelBuffer).oriented(orientation)
-                return Image.createCVPixelBuffer(from: ciImage) ?? pixelBuffer
+                return autoreleasepool {
+                    let ciImage = CIImage(cvPixelBuffer: pixelBuffer).oriented(orientation)
+                    return Image.createCVPixelBuffer(from: ciImage) ?? pixelBuffer
+                }
             }
             CVPixelBufferLockBaseAddress(outPixelBuffer, [])
             defer { CVPixelBufferUnlockBaseAddress(outPixelBuffer, []) }
             guard let outBase = CVPixelBufferGetBaseAddress(outPixelBuffer) else {
-                let ciImage = CIImage(cvPixelBuffer: pixelBuffer).oriented(orientation)
-                return Image.createCVPixelBuffer(from: ciImage) ?? pixelBuffer
+                return autoreleasepool {
+                    let ciImage = CIImage(cvPixelBuffer: pixelBuffer).oriented(orientation)
+                    return Image.createCVPixelBuffer(from: ciImage) ?? pixelBuffer
+                }
             }
             var dest = vImage_Buffer(
                 data: outBase,
@@ -303,45 +325,108 @@ public struct Image: Hashable, @unchecked Sendable {
                 return outPixelBuffer
             } catch {
                 // Fallback to CI if vImage fails
-                let ciImage = CIImage(cvPixelBuffer: pixelBuffer).oriented(orientation)
-                return Image.createCVPixelBuffer(from: ciImage) ?? pixelBuffer
+                return autoreleasepool {
+                    let ciImage = CIImage(cvPixelBuffer: pixelBuffer).oriented(orientation)
+                    return Image.createCVPixelBuffer(from: ciImage) ?? pixelBuffer
+                }
             }
         }
         // Fallback path uses Core Image orientation if wrapping not possible
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer).oriented(orientation)
-        guard let correctedBuffer = Image.createCVPixelBuffer(from: ciImage) else {
-            return pixelBuffer
-        }
-        return correctedBuffer
+        return autoreleasepool { Image.createCVPixelBuffer(from: ciImage) } ?? pixelBuffer
     }
     
     private static func createCGImage(from pixelBuffer: CVPixelBuffer) -> CGImage? {
-        let format = CVPixelBufferGetPixelFormatType(pixelBuffer)
-        let width = CVPixelBufferGetWidth(pixelBuffer)
-        let height = CVPixelBufferGetHeight(pixelBuffer)
+        return autoreleasepool {
+            let format = CVPixelBufferGetPixelFormatType(pixelBuffer)
+            let width = CVPixelBufferGetWidth(pixelBuffer)
+            let height = CVPixelBufferGetHeight(pixelBuffer)
 
-        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+            CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+            defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
 
-        guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else {
-            return nil
-        }
-        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
-
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = CGBitmapInfo.byteOrder32Little.union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue))
-
-        // Fast path for BGRA buffers: wrap memory directly
-        if format == kCVPixelFormatType_32BGRA {
-            guard let provider = CGDataProvider(dataInfo: nil, data: baseAddress, size: bytesPerRow * height, releaseData: { _,_,_ in }) else {
+            guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else {
                 return nil
             }
+            let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
+
+            let colorSpace = CGColorSpaceCreateDeviceRGB()
+            let bitmapInfo = CGBitmapInfo.byteOrder32Little.union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue))
+
+            // Fast path for BGRA buffers: wrap memory directly
+            if format == kCVPixelFormatType_32BGRA {
+                guard let provider = CGDataProvider(dataInfo: nil, data: baseAddress, size: bytesPerRow * height, releaseData: { _,_,_ in }) else {
+                    return nil
+                }
+                return CGImage(
+                    width: width,
+                    height: height,
+                    bitsPerComponent: 8,
+                    bitsPerPixel: 32,
+                    bytesPerRow: bytesPerRow,
+                    space: colorSpace,
+                    bitmapInfo: bitmapInfo,
+                    provider: provider,
+                    decode: nil,
+                    shouldInterpolate: false,
+                    intent: .defaultIntent
+                )
+            }
+
+            // Convert other supported formats to BGRA using vImage
+            let dstBytesPerRow = width * 4
+            let byteCount = dstBytesPerRow * height
+            guard let dstData = malloc(byteCount) else { return nil }
+            var dstBuffer = vImage_Buffer(data: dstData, height: vImagePixelCount(height), width: vImagePixelCount(width), rowBytes: dstBytesPerRow)
+
+            var success = false
+
+            switch format {
+            case kCVPixelFormatType_32ARGB:
+                // Wrap source as vImage buffer
+                var srcBuffer = vImage_Buffer(data: baseAddress, height: vImagePixelCount(height), width: vImagePixelCount(width), rowBytes: bytesPerRow)
+                // Permute ARGB -> BGRA (indices for ARGB8888 are [A,R,G,B])
+                var permute: [UInt8] = [3, 2, 1, 0] // B,G,R,A
+                let err = vImagePermuteChannels_ARGB8888(&srcBuffer, &dstBuffer, &permute, vImage_Flags(kvImageNoFlags))
+                success = (err == kvImageNoError)
+
+            case kCVPixelFormatType_OneComponent8:
+                // Grayscale 8-bit -> write ARGB (R=G=B=Y, A=255) directly into dstBuffer
+                var planarY = vImage_Buffer(data: baseAddress, height: vImagePixelCount(height), width: vImagePixelCount(width), rowBytes: bytesPerRow)
+
+                // Allocate planar alpha and fill with 255
+                let aRowBytes = width
+                let aByteCount = aRowBytes * height
+                guard let aData = malloc(aByteCount) else { free(dstData); return nil }
+                defer { free(aData) }
+                memset(aData, 255, aByteCount)
+                var planarA = vImage_Buffer(data: aData, height: vImagePixelCount(height), width: vImagePixelCount(width), rowBytes: aRowBytes)
+
+                // Convert Planar8 (Y) to ARGB8888 directly into dstBuffer (chunky)
+                // Signature: vImageConvert_Planar8toARGB8888(R, G, B, A, destARGB, flags)
+                let err = vImageConvert_Planar8toARGB8888(&planarY, &planarY, &planarY, &planarA, &dstBuffer, vImage_Flags(kvImageNoFlags))
+                success = (err == kvImageNoError)
+
+            default:
+                success = false
+            }
+
+            guard success else { free(dstData); return nil }
+
+            // Build CGImage from converted BGRA buffer
+            guard let provider = CGDataProvider(dataInfo: nil, data: dstData, size: byteCount, releaseData: { _, data, _ in
+                free(UnsafeMutableRawPointer(mutating: data))
+            }) else {
+                free(dstData)
+                return nil
+            }
+
             return CGImage(
                 width: width,
                 height: height,
                 bitsPerComponent: 8,
                 bitsPerPixel: 32,
-                bytesPerRow: bytesPerRow,
+                bytesPerRow: dstBytesPerRow,
                 space: colorSpace,
                 bitmapInfo: bitmapInfo,
                 provider: provider,
@@ -350,84 +435,24 @@ public struct Image: Hashable, @unchecked Sendable {
                 intent: .defaultIntent
             )
         }
-
-        // Convert other supported formats to BGRA using vImage
-        let dstBytesPerRow = width * 4
-        let byteCount = dstBytesPerRow * height
-        guard let dstData = malloc(byteCount) else { return nil }
-        var dstBuffer = vImage_Buffer(data: dstData, height: vImagePixelCount(height), width: vImagePixelCount(width), rowBytes: dstBytesPerRow)
-
-        var success = false
-
-        switch format {
-        case kCVPixelFormatType_32ARGB:
-            // Wrap source as vImage buffer
-            var srcBuffer = vImage_Buffer(data: baseAddress, height: vImagePixelCount(height), width: vImagePixelCount(width), rowBytes: bytesPerRow)
-            // Permute ARGB -> BGRA (indices for ARGB8888 are [A,R,G,B])
-            var permute: [UInt8] = [3, 2, 1, 0] // B,G,R,A
-            let err = vImagePermuteChannels_ARGB8888(&srcBuffer, &dstBuffer, &permute, vImage_Flags(kvImageNoFlags))
-            success = (err == kvImageNoError)
-
-        case kCVPixelFormatType_OneComponent8:
-            // Grayscale 8-bit -> write ARGB (R=G=B=Y, A=255) directly into dstBuffer
-            var planarY = vImage_Buffer(data: baseAddress, height: vImagePixelCount(height), width: vImagePixelCount(width), rowBytes: bytesPerRow)
-
-            // Allocate planar alpha and fill with 255
-            let aRowBytes = width
-            let aByteCount = aRowBytes * height
-            guard let aData = malloc(aByteCount) else { free(dstData); return nil }
-            defer { free(aData) }
-            memset(aData, 255, aByteCount)
-            var planarA = vImage_Buffer(data: aData, height: vImagePixelCount(height), width: vImagePixelCount(width), rowBytes: aRowBytes)
-
-            // Convert Planar8 (Y) to ARGB8888 directly into dstBuffer (chunky)
-            // Signature: vImageConvert_Planar8toARGB8888(R, G, B, A, destARGB, flags)
-            let err = vImageConvert_Planar8toARGB8888(&planarY, &planarY, &planarY, &planarA, &dstBuffer, vImage_Flags(kvImageNoFlags))
-            success = (err == kvImageNoError)
-
-        default:
-            success = false
-        }
-
-        guard success else { free(dstData); return nil }
-
-        // Build CGImage from converted BGRA buffer
-        guard let provider = CGDataProvider(dataInfo: nil, data: dstData, size: byteCount, releaseData: { _, data, _ in
-            free(UnsafeMutableRawPointer(mutating: data))
-        }) else {
-            free(dstData)
-            return nil
-        }
-
-        return CGImage(
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bitsPerPixel: 32,
-            bytesPerRow: dstBytesPerRow,
-            space: colorSpace,
-            bitmapInfo: bitmapInfo,
-            provider: provider,
-            decode: nil,
-            shouldInterpolate: false,
-            intent: .defaultIntent
-        )
     }
     
     private static func createCVPixelBuffer(from ciImage: CIImage) -> CVPixelBuffer? {
-        let width = Int(ciImage.extent.width)
-        let height = Int(ciImage.extent.height)
-        
-        guard let pool = pixelBufferPool(width: width, height: height) else {
-            return nil
+        return autoreleasepool {
+            let width = Int(ciImage.extent.width)
+            let height = Int(ciImage.extent.height)
+            
+            guard let pool = Image.pixelBufferPool(width: width, height: height) else {
+                return nil
+            }
+            var bufferOut: CVPixelBuffer?
+            let status = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &bufferOut)
+            guard status == kCVReturnSuccess, let buffer = bufferOut else {
+                return nil
+            }
+            Image.ciContext.render(ciImage, to: buffer)
+            return buffer
         }
-        var bufferOut: CVPixelBuffer?
-        let status = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &bufferOut)
-        guard status == kCVReturnSuccess, let buffer = bufferOut else {
-            return nil
-        }
-        Image.ciContext.render(ciImage, to: buffer)
-        return buffer
     }
     
     // Wrap a CVPixelBuffer's base address as a vImage_Buffer (no allocation). Returns nil if unsupported format.
@@ -521,105 +546,107 @@ public struct Image: Hashable, @unchecked Sendable {
     }
 
     private static func createCVPixelBuffer(from cgImage: CGImage, orientation: CGImagePropertyOrientation) -> CVPixelBuffer? {
-        // Determine destination size based on orientation
-        let srcWidth = cgImage.width
-        let srcHeight = cgImage.height
-        let needsSwap = (orientation == .left || orientation == .right || orientation == .leftMirrored || orientation == .rightMirrored)
-        let dstWidth = needsSwap ? srcHeight : srcWidth
-        let dstHeight = needsSwap ? srcWidth : srcHeight
-
-        guard let pool = pixelBufferPool(width: dstWidth, height: dstHeight, pixelFormat: kCVPixelFormatType_32BGRA) else {
-            return nil
-        }
-        var pixelBufferOpt: CVPixelBuffer?
-        guard CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pixelBufferOpt) == kCVReturnSuccess, let pixelBuffer = pixelBufferOpt else {
-            return nil
-        }
-
-        CVPixelBufferLockBaseAddress(pixelBuffer, [])
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
-
-        guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else { return nil }
-
-        let dstRowBytes = CVPixelBufferGetBytesPerRow(pixelBuffer)
-
-        // vImage formats
-        guard var destFormat = vImage_CGImageFormat(bitsPerComponent: 8,
-                                              bitsPerPixel: 32,
-                                              colorSpace: cgImage.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
-                                              bitmapInfo: CGBitmapInfo.byteOrder32Little.union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)),
-                                                    renderingIntent: .defaultIntent) else {
-            return nil
-        }
-        guard var srcFormat = vImage_CGImageFormat(bitsPerComponent: cgImage.bitsPerComponent,
-                                             bitsPerPixel: cgImage.bitsPerPixel,
-                                             colorSpace: cgImage.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
-                                             bitmapInfo: cgImage.bitmapInfo,
-                                                   renderingIntent: cgImage.renderingIntent) else {
-            return nil
-        }
-
-        // Create source buffer from CGImage
-        var srcBuffer = vImage_Buffer()
-        var error = vImageBuffer_InitWithCGImage(&srcBuffer, &srcFormat, nil, cgImage, vImage_Flags(kvImageNoFlags))
-        guard error == kvImageNoError else {
-            return nil
-        }
-        defer { free(srcBuffer.data) }
-
-        // Destination buffer wrapping pixel buffer memory
-        var dstBuffer = vImage_Buffer(data: baseAddress, height: vImagePixelCount(dstHeight), width: vImagePixelCount(dstWidth), rowBytes: dstRowBytes)
-
-        // Build a converter from source to BGRA8 using managed API
-        guard let converter = vImageConverter_CreateWithCGImageFormat(&srcFormat, &destFormat, nil, vImage_Flags(kvImageNoFlags), &error)?.takeRetainedValue() else {
-            return nil
-        }
-
-        // If orientation is up, convert directly into destination
-        if orientation == .up {
-            error = vImageConvert_AnyToAny(converter, &srcBuffer, &dstBuffer, nil, vImage_Flags(kvImageNoFlags))
+        return autoreleasepool {
+            // Determine destination size based on orientation
+            let srcWidth = cgImage.width
+            let srcHeight = cgImage.height
+            let needsSwap = (orientation == .left || orientation == .right || orientation == .leftMirrored || orientation == .rightMirrored)
+            let dstWidth = needsSwap ? srcHeight : srcWidth
+            let dstHeight = needsSwap ? srcWidth : srcHeight
+            
+            guard let pool = pixelBufferPool(width: dstWidth, height: dstHeight, pixelFormat: kCVPixelFormatType_32BGRA) else {
+                return nil
+            }
+            var pixelBufferOpt: CVPixelBuffer?
+            guard CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pixelBufferOpt) == kCVReturnSuccess, let pixelBuffer = pixelBufferOpt else {
+                return nil
+            }
+            
+            CVPixelBufferLockBaseAddress(pixelBuffer, [])
+            defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
+            
+            guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else { return nil }
+            
+            let dstRowBytes = CVPixelBufferGetBytesPerRow(pixelBuffer)
+            
+            // vImage formats
+            guard var destFormat = vImage_CGImageFormat(bitsPerComponent: 8,
+                                                        bitsPerPixel: 32,
+                                                        colorSpace: cgImage.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
+                                                        bitmapInfo: CGBitmapInfo.byteOrder32Little.union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)),
+                                                        renderingIntent: .defaultIntent) else {
+                return nil
+            }
+            guard var srcFormat = vImage_CGImageFormat(bitsPerComponent: cgImage.bitsPerComponent,
+                                                       bitsPerPixel: cgImage.bitsPerPixel,
+                                                       colorSpace: cgImage.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
+                                                       bitmapInfo: cgImage.bitmapInfo,
+                                                       renderingIntent: cgImage.renderingIntent) else {
+                return nil
+            }
+            
+            // Create source buffer from CGImage
+            var srcBuffer = vImage_Buffer()
+            var error = vImageBuffer_InitWithCGImage(&srcBuffer, &srcFormat, nil, cgImage, vImage_Flags(kvImageNoFlags))
+            guard error == kvImageNoError else {
+                return nil
+            }
+            defer { free(srcBuffer.data) }
+            
+            // Destination buffer wrapping pixel buffer memory
+            var dstBuffer = vImage_Buffer(data: baseAddress, height: vImagePixelCount(dstHeight), width: vImagePixelCount(dstWidth), rowBytes: dstRowBytes)
+            
+            // Build a converter from source to BGRA8 using managed API
+            guard let converter = vImageConverter_CreateWithCGImageFormat(&srcFormat, &destFormat, nil, vImage_Flags(kvImageNoFlags), &error)?.takeRetainedValue() else {
+                return nil
+            }
+            
+            // If orientation is up, convert directly into destination
+            if orientation == .up {
+                error = vImageConvert_AnyToAny(converter, &srcBuffer, &dstBuffer, nil, vImage_Flags(kvImageNoFlags))
+                guard error == kvImageNoError else { return nil }
+                return pixelBuffer
+            }
+            
+            // Otherwise, convert to an intermediate BGRA buffer first
+            let intermediateRowBytes = dstWidth * 4
+            guard let intermediateData = malloc(dstHeight * intermediateRowBytes) else { return nil }
+            defer { free(intermediateData) }
+            var intermediate = vImage_Buffer(data: intermediateData, height: vImagePixelCount(dstHeight), width: vImagePixelCount(dstWidth), rowBytes: intermediateRowBytes)
+            
+            // Convert source into a temporary buffer sized like the source first (BGRA)
+            let tmpRowBytes = srcWidth * 4
+            guard let tmpData = malloc(srcHeight * tmpRowBytes) else { return nil }
+            defer { free(tmpData) }
+            var tmpBGRA = vImage_Buffer(data: tmpData, height: vImagePixelCount(srcHeight), width: vImagePixelCount(srcWidth), rowBytes: tmpRowBytes)
+            
+            // Create a destFormat identical (BGRA8) for tmp/intermediate
+            guard var bgraFormat = vImage_CGImageFormat(bitsPerComponent: 8,
+                                                        bitsPerPixel: 32,
+                                                        colorSpace: cgImage.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
+                                                        bitmapInfo: CGBitmapInfo.byteOrder32Little.union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)),
+                                                        renderingIntent: .defaultIntent) else {
+                return nil
+            }
+            guard let toBGRAConverter = vImageConverter_CreateWithCGImageFormat(&srcFormat, &bgraFormat, nil, vImage_Flags(kvImageNoFlags), nil)?.takeRetainedValue() else {
+                return nil
+            }
+            
+            error = vImageConvert_AnyToAny(toBGRAConverter, &srcBuffer, &tmpBGRA, nil, vImage_Flags(kvImageNoFlags))
             guard error == kvImageNoError else { return nil }
+            
+            do {
+                try applyOrientation(orientation, src: &tmpBGRA, dest: &intermediate)
+            } catch {
+                return nil
+            }
+            
+            // Copy oriented intermediate into destination pixel buffer (may differ in rowBytes)
+            error = vImageCopyBuffer(&intermediate, &dstBuffer, 4, vImage_Flags(kvImageNoFlags))
+            guard error == kvImageNoError else { return nil }
+            
             return pixelBuffer
         }
-
-        // Otherwise, convert to an intermediate BGRA buffer first
-        let intermediateRowBytes = dstWidth * 4
-        guard let intermediateData = malloc(dstHeight * intermediateRowBytes) else { return nil }
-        defer { free(intermediateData) }
-        var intermediate = vImage_Buffer(data: intermediateData, height: vImagePixelCount(dstHeight), width: vImagePixelCount(dstWidth), rowBytes: intermediateRowBytes)
-
-        // Convert source into a temporary buffer sized like the source first (BGRA)
-        let tmpRowBytes = srcWidth * 4
-        guard let tmpData = malloc(srcHeight * tmpRowBytes) else { return nil }
-        defer { free(tmpData) }
-        var tmpBGRA = vImage_Buffer(data: tmpData, height: vImagePixelCount(srcHeight), width: vImagePixelCount(srcWidth), rowBytes: tmpRowBytes)
-
-        // Create a destFormat identical (BGRA8) for tmp/intermediate
-        guard var bgraFormat = vImage_CGImageFormat(bitsPerComponent: 8,
-                                              bitsPerPixel: 32,
-                                              colorSpace: cgImage.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
-                                              bitmapInfo: CGBitmapInfo.byteOrder32Little.union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)),
-                                                    renderingIntent: .defaultIntent) else {
-            return nil
-        }
-        guard let toBGRAConverter = vImageConverter_CreateWithCGImageFormat(&srcFormat, &bgraFormat, nil, vImage_Flags(kvImageNoFlags), nil)?.takeRetainedValue() else {
-            return nil
-        }
-
-        error = vImageConvert_AnyToAny(toBGRAConverter, &srcBuffer, &tmpBGRA, nil, vImage_Flags(kvImageNoFlags))
-        guard error == kvImageNoError else { return nil }
-        
-        do {
-            try applyOrientation(orientation, src: &tmpBGRA, dest: &intermediate)
-        } catch {
-            return nil
-        }
-
-        // Copy oriented intermediate into destination pixel buffer (may differ in rowBytes)
-        error = vImageCopyBuffer(&intermediate, &dstBuffer, 4, vImage_Flags(kvImageNoFlags))
-        guard error == kvImageNoError else { return nil }
-
-        return pixelBuffer
     }
 }
 
