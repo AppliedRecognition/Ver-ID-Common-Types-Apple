@@ -8,7 +8,7 @@
 import Foundation
 import CoreGraphics
 
-extension CGSize: Hashable {
+extension CGSize: @retroactive Hashable {
     
     /// Hashable implementation
     public func hash(into hasher: inout Hasher) {

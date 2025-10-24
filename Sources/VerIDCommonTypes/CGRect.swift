@@ -18,7 +18,7 @@ public extension CGRect {
 }
 
 
-extension CGRect: Hashable {
+extension CGRect: @retroactive Hashable {
     
     /// Hashable implementation
     public func hash(into hasher: inout Hasher) {
