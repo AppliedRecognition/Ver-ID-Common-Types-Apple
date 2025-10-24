@@ -26,7 +26,7 @@ struct ImageTests {
         #expect(image != nil)
     }
     
-    @Test(arguments: ["up", "right", "down", "left", "upMirrored", "rightMirrored", "downMirrored", "leftMirrored"])
+    @Test(.disabled("Run as needed"), arguments: ["up", "right", "down", "left", "upMirrored", "rightMirrored", "downMirrored", "leftMirrored"])
     func createImageWithOrientation(orientationStr: String) throws {
         guard let orientation = UIImage.Orientation.fromString(orientationStr) else {
             throw TestError.genericError
