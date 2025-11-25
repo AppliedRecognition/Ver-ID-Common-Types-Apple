@@ -113,16 +113,34 @@ public struct Image: Hashable, @unchecked Sendable {
             guard let buffer = Image.createCVPixelBuffer(from: cgImage, orientation: orientation) else {
                 return nil
             }
-            if let depthAuxDataInfo = CGImageSourceCopyAuxiliaryDataInfoAtIndex(imageSource, 0, kCGImageAuxiliaryDataTypeDepth as CFString) as? [AnyHashable: Any],
-                  let depthData = try? AVDepthData(fromDictionaryRepresentation: depthAuxDataInfo) {
-                if orientation != .up {
-                    return (buffer, depthData.applyingExifOrientation(orientation))
-                } else {
-                    return (buffer, depthData)
+            let count = CGImageSourceGetCount(imageSource)
+            for i in 0..<count {
+                if let depthAuxDataInfo = CGImageSourceCopyAuxiliaryDataInfoAtIndex(imageSource, i, kCGImageAuxiliaryDataTypeDepth as CFString) as? [AnyHashable: Any],
+                   var depthData = try? AVDepthData(fromDictionaryRepresentation: depthAuxDataInfo) {
+                    if depthData.depthDataType != kCVPixelFormatType_DepthFloat32 {
+                        depthData = depthData.converting(toDepthDataType: kCVPixelFormatType_DepthFloat32)
+                    }
+                    if orientation != .up {
+                        return (buffer, depthData.applyingExifOrientation(orientation))
+                    } else {
+                        return (buffer, depthData)
+                    }
                 }
-            } else {
-                return (buffer, nil)
             }
+            for i in 0..<count {
+                if let aux = CGImageSourceCopyAuxiliaryDataInfoAtIndex(imageSource, i, kCGImageAuxiliaryDataTypeDisparity) as? [AnyHashable: Any],
+                   var depthData = try? AVDepthData(fromDictionaryRepresentation: aux as NSDictionary as! [AnyHashable: Any]) {
+                    if depthData.depthDataType != kCVPixelFormatType_DepthFloat32 {
+                        depthData = depthData.converting(toDepthDataType: kCVPixelFormatType_DepthFloat32)
+                    }
+                    if orientation != .up {
+                        return (buffer, depthData.applyingExifOrientation(orientation))
+                    } else {
+                        return (buffer, depthData)
+                    }
+                }
+            }
+            return (buffer, nil)
         }) else {
             return nil
         }
@@ -673,4 +691,3 @@ public extension CGImage {
         }
     }
 }
-
