@@ -54,6 +54,16 @@ struct ImageTests {
         }
     }
     
+    @Test("Test load depth data")
+    func loadDepthData() throws {
+        guard let url = Bundle.module.url(forResource: "IMG_5856", withExtension: "heic") else {
+            throw TestError.genericError
+        }
+        let heic = try Data(contentsOf: url)
+        let image = try #require(Image(heicData: heic))
+        try #require(image.depthData)
+    }
+    
     private func createUIImage() throws -> UIImage {
         guard let url = Bundle.module.url(forResource: "Image", withExtension: "heic") else {
             throw TestError.genericError
