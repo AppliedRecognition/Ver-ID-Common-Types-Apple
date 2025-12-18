@@ -58,6 +58,10 @@ public struct Face: Hashable, Sendable {
         self.mouthRightCorner = mouthRightCorner
     }
     
+    public init(angle: EulerAngle<Float>, quality: Float, landmarks: [CGPoint], leftEye: CGPoint, rightEye: CGPoint, noseTip: CGPoint?=nil, mouthCentre: CGPoint?=nil, mouthLeftCorner: CGPoint?=nil, mouthRightCorner: CGPoint?=nil) {
+        self.init(bounds: Self.calculateBounds(leftEye: leftEye, rightEye: rightEye, yaw: angle.yaw), angle: angle, quality: quality, landmarks: landmarks, leftEye: leftEye, rightEye: rightEye, noseTip: noseTip, mouthCentre: mouthCentre, mouthLeftCorner: mouthLeftCorner, mouthRightCorner: mouthRightCorner)
+    }
+    
     /// Change the aspect ratio of the face
     ///
     /// The conversion will extend the shorter side of the face bounds to match the given aspect ratio
@@ -93,6 +97,20 @@ public struct Face: Hashable, Sendable {
         let mouthLeftCorner = self.mouthLeftCorner?.applying(transform)
         let mouthRightCorner = self.mouthRightCorner?.applying(transform)
         return Face(bounds: faceBounds, angle: self.angle, quality: self.quality, landmarks: landmarks, leftEye: leftEye, rightEye: rightEye, noseTip: noseTip, mouthCentre: mouthCentre, mouthLeftCorner: mouthLeftCorner, mouthRightCorner: mouthRightCorner)
+    }
+    
+    public func normalizingBounds() -> Face {
+        return Face(angle: self.angle, quality: self.quality, landmarks: self.landmarks, leftEye: self.leftEye, rightEye: self.rightEye, noseTip: self.noseTip, mouthCentre: self.mouthCentre, mouthLeftCorner: self.mouthLeftCorner, mouthRightCorner: self.mouthRightCorner)
+    }
+    
+    private static func calculateBounds(leftEye: CGPoint, rightEye: CGPoint, yaw: Float) -> CGRect {
+        let eyeDistance = rightEye.distance(to: leftEye)
+        let yawRadians = Measurement(value: Double(yaw), unit: UnitAngle.degrees).converted(to: .radians).value
+        let correctedDistance = eyeDistance / cos(yawRadians)
+        let width = correctedDistance * 3
+        let height = width * 1.25
+        var centre = CGPoint(x: leftEye.x + rightEye.x * 0.5 - leftEye.x * 0.5, y: leftEye.y + rightEye.y * 0.5 - leftEye.y * 0.5 + correctedDistance * 0.25)
+        return CGRect(x: centre.x - width * 0.5, y: centre.y - height * 0.5, width: width, height: height)
     }
 }
 
@@ -180,5 +198,11 @@ extension Face: Codable {
             return CGPoint(x: arr[0], y: arr[1])
         }
         return nil
+    }
+}
+
+fileprivate extension CGPoint {
+    func distance(to other: CGPoint) -> CGFloat {
+        return sqrt(pow(x - other.x, 2) + pow(y - other.y, 2))
     }
 }
